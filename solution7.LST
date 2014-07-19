@@ -1,0 +1,270 @@
+SQL> 
+SQL> SET ECHO ON
+SQL> SET FEEDBACK ON
+SQL> SET PAGESIZE 25;
+SQL> /*
+SQL> Name: Aaron Colin Foote
+SQL> File: solution 7 for CSCI315 Assignment 2
+SQL> Date: 3rd April 2014
+SQL> Note: I did not include @dbcreate.sql and @dbdrop.sql because they interfered with the .lst
+SQL> output file that I was creating.
+SQL>  */
+SQL> 
+SQL> /* (1) First, the script must create a relational view
+SQL> APPS(fname, lname, dob, title)
+SQL> where fname is the first name of an applicant, lname is the last name of an
+SQL> applicant, dob is a date of birth of an applicant and title is a title of a position
+SQL> applied by an applicant with a given first name, last name, and date of birth. */
+SQL> 
+SQL> CREATE VIEW APPS AS (
+  2  	     SELECT fname, lname, dob, title
+  3  	     FROM APPLICANT
+  4  	     NATURAL JOIN APPLIES
+  5  	     NATURAL JOIN POSITION);
+
+View created.
+
+SQL> 
+SQL> /* (2) Next, the script must implement a database trigger that allows for insertion of new
+SQL> information into the database through insertion of a row into a view APPS. The
+SQL> trigger must detect an insertion into a relational view APPS. If from an attempted
+SQL> insertion it is possible to uniquely identify an applicant and a position applied by an
+SQL> applicant the trigger must add relevant information into the database. Otherwise, the
+SQL> trigger must reject insertion into the view. Additionally, the trigger must reject an
+SQL> insertion into the view if an applicant already applied for a position. */
+SQL> 
+SQL> CREATE OR REPLACE TRIGGER solution7
+  2  INSTEAD OF INSERT ON APPS
+  3  DECLARE
+  4  	     REPEATROWS NUMBER(2);   /* Applicant already applied for position */
+  5  	     APPLIEDCOUNT NUMBER(2); /* Applications made by applicant */
+  6  	     UNIQUETITLE NUMBER(2);  /* Count positions sharing the new APPS record title */
+  7  	     UNIQUEPNUMBER NUMBER(2);	     /* Retrieve the pnumber of APPS title */
+  8  	     APPLICANTANUMBER NUMBER(2);     /* Store the Applicant anumber, matching APPS info */
+  9  
+ 10  BEGIN
+ 11  	     /* Query finds the amount of rows where APPS info matches records stored across Applicant, Position and Applies */
+ 12  	     SELECT COUNT(*)
+ 13  	     INTO REPEATROWS
+ 14  	     FROM APPLICANT
+ 15  	     NATURAL JOIN APPLIES
+ 16  	     NATURAL JOIN POSITION
+ 17  	     WHERE fname = :NEW.fname
+ 18  	     AND lname = :NEW.lname
+ 19  	     AND dob = :NEW.dob
+ 20  	     AND title = :NEW.title;
+ 21  
+ 22  	     /* Query finds the amount of positions that the applicant in APPS has applied for */
+ 23  	     SELECT COUNT(*)
+ 24  	     INTO APPLIEDCOUNT
+ 25  	     FROM APPLIES
+ 26  	     WHERE anumber = (SELECT APPLICANT.anumber
+ 27  					     FROM APPLICANT
+ 28  					     WHERE fname = :NEW.fname
+ 29  					     AND lname = :NEW.lname
+ 30  					     AND dob = :NEW.dob);
+ 31  
+ 32  	     /* Query finds the amount of positions sharing the title inserted into APPS */
+ 33  	     SELECT COUNT(*)
+ 34  	     INTO UNIQUETITLE
+ 35  	     FROM POSITION
+ 36  	     WHERE POSITION.title = :NEW.title;
+ 37  
+ 38  	     /* Query stores the Applicant's anumber, or 0 if no data found */
+ 39  	     SELECT nvl(MAX(anumber), 0)
+ 40  		     INTO APPLICANTANUMBER
+ 41  		     FROM APPLICANT
+ 42  		     WHERE fname = :NEW.fname
+ 43  		     AND lname = :NEW.lname
+ 44  		     AND dob = :NEW.dob;
+ 45  
+ 46  	     IF (REPEATROWS > 0)     /* APPS data already exists */
+ 47  	     THEN
+ 48  		     RAISE_APPLICATION_ERROR(-20001,'Record already exists in Relational View APPS');
+ 49  	     ELSIF (APPLIEDCOUNT > 0) /* Applicant in new APPS record has already applied for a position */
+ 50  	     THEN
+ 51  		     RAISE_APPLICATION_ERROR(-20002,'Applicant already applied once, according to Relational View APPS');
+ 52  	     ELSIF (APPLICANTANUMBER = 0) /* Applicant in new APPS record does not exist in Applicant */
+ 53  	     THEN
+ 54  		     RAISE_APPLICATION_ERROR(-20003,'Applicant in view APPS does not exist in Applicant table!');
+ 55  	     ELSIF (UNIQUETITLE = 1) /* Title in new APPS record is unique in table Position */
+ 56  	     THEN
+ 57  		     /* Query finds the pnumber of a uniquely titled Position */
+ 58  		     SELECT pnumber
+ 59  		     INTO UNIQUEPNUMBER
+ 60  		     FROM POSITION
+ 61  		     WHERE POSITION.title = :NEW.title;
+ 62  
+ 63  		     /* Used sysdate, since no data provided and is a NON NULL attribute in Applies */
+ 64  		     INSERT INTO APPLIES VALUES (APPLICANTANUMBER, UNIQUEPNUMBER, sysdate);
+ 65  	     ELSE /* Position title not unique, not possible to identify which pnumber to use in Applies */
+ 66  		     RAISE_APPLICATION_ERROR(-20004,'Position is not of a unique title, not possible to identify pnumber and insert into table Applies!');
+ 67  	     END IF;
+ 68  END;
+ 69  /
+
+Trigger created.
+
+SQL> 
+SQL> show errors
+No errors.
+SQL> 
+SQL> SELECT * FROM APPS;
+
+FNAME                LNAME                          DOB       TITLE                                                                                                                                     
+-------------------- ------------------------------ --------- ------------------------------                                                                                                            
+Harry                Potter                         12-DEC-80 professor                                                                                                                                 
+Harry                Potter                         12-DEC-80 lecturer                                                                                                                                  
+Johnny               Walker                         13-FEB-90 professor                                                                                                                                 
+Johnny               Walker                         13-FEB-90 lecturer                                                                                                                                  
+Mary                 Poppins                        01-JAN-50 professor                                                                                                                                 
+Mary                 Poppins                        01-JAN-50 lecturer                                                                                                                                  
+Michael              Collins                        25-MAY-60 professor                                                                                                                                 
+Michael              Collins                        25-MAY-60 lecturer                                                                                                                                  
+Margaret             Finch                          07-DEC-53 professor                                                                                                                                 
+Margaret             Finch                          07-DEC-53 senior lecturer                                                                                                                           
+Margaret             Finch                          07-DEC-53 lecturer                                                                                                                                  
+Claudia              Kowalewski                     03-MAY-59 professor                                                                                                                                 
+Claudia              Kowalewski                     03-MAY-59 senior lecturer                                                                                                                           
+James                Bond                           01-JAN-60 professor                                                                                                                                 
+James                Bond                           01-JAN-60 associate professor                                                                                                                       
+James                Bond                           01-JAN-60 senior lecturer                                                                                                                           
+Stephen              Staunton                       23-OCT-77 associate professor                                                                                                                       
+Joseph               Staunton                       23-OCT-77 associate professor                                                                                                                       
+John                 Spiderman                      21-JUN-90 professor                                                                                                                                 
+
+19 rows selected.
+
+SQL> 
+SQL> /* (3) Finally the script must comprehensively test the triggers implemented in a step (2). */
+SQL> 
+SQL> /* Creating a unique position that is distinguishable by its title */
+SQL> INSERT INTO POSITION VALUES ( 00000011, 'unique position', 45000.00, 'computer', NULL, 'teaching', 'University of New South Wales');
+
+1 row created.
+
+SQL> 
+SQL> /* Record already exists in view APPS, not possible to uniquely identify applicant and position!
+SQL> Trigger error will be raised */
+SQL> INSERT INTO APPS VALUES ('Harry', 'Potter', TO_DATE('12-DEC-1980', 'DD-MON-YYYY'), 'lecturer');
+INSERT INTO APPS VALUES ('Harry', 'Potter', TO_DATE('12-DEC-1980', 'DD-MON-YYYY'), 'lecturer')
+            *
+ERROR at line 1:
+ORA-20001: Record already exists in Relational View APPS 
+ORA-06512: at "ACF502.SOLUTION7", line 46 
+ORA-04088: error during execution of trigger 'ACF502.SOLUTION7' 
+
+
+SQL> 
+SQL> /* Applicant already applied, according to view APPS!
+SQL> Trigger error will be raised */
+SQL> INSERT INTO APPS VALUES ('Harry', 'Potter', TO_DATE('12-DEC-1980', 'DD-MON-YYYY'), 'senior lecturer');
+INSERT INTO APPS VALUES ('Harry', 'Potter', TO_DATE('12-DEC-1980', 'DD-MON-YYYY'), 'senior lecturer')
+            *
+ERROR at line 1:
+ORA-20002: Applicant already applied once, according to Relational View APPS 
+ORA-06512: at "ACF502.SOLUTION7", line 49 
+ORA-04088: error during execution of trigger 'ACF502.SOLUTION7' 
+
+
+SQL> 
+SQL> /* Applicant does not exist in table Applicant, therefore it is impossible to add to table Applies.
+SQL> Trigger error will be raised */
+SQL> INSERT INTO APPS VALUES ('Non', 'Existant', TO_DATE('12-OCT-1991', 'DD-MON-YYYY'), 'unique position');
+INSERT INTO APPS VALUES ('Non', 'Existant', TO_DATE('12-OCT-1991', 'DD-MON-YYYY'), 'unique position')
+            *
+ERROR at line 1:
+ORA-20003: Applicant in view APPS does not exist in Applicant table! 
+ORA-06512: at "ACF502.SOLUTION7", line 52 
+ORA-04088: error during execution of trigger 'ACF502.SOLUTION7' 
+
+
+SQL> 
+SQL> /* Applicant has not applied for any position, but it is not possible to identify pnumber due to multiple occurance of Position title
+SQL> Trigger error will be raised */
+SQL> INSERT INTO APPS VALUES ('George', 'TheFirst', TO_DATE('12-OCT-1991', 'DD-MON-YYYY'), 'lecturer');
+INSERT INTO APPS VALUES ('George', 'TheFirst', TO_DATE('12-OCT-1991', 'DD-MON-YYYY'), 'lecturer')
+            *
+ERROR at line 1:
+ORA-20004: Position is not of a unique title, not possible to identify pnumber and insert into table Applies! 
+ORA-06512: at "ACF502.SOLUTION7", line 64 
+ORA-04088: error during execution of trigger 'ACF502.SOLUTION7' 
+
+
+SQL> 
+SQL> /* Applicant has not applied for any position and position title only exists in one record of Position.
+SQL> No trigger error will be raised, anumber and pnumber will be inserted into Applies */
+SQL> INSERT INTO APPS VALUES ('George', 'TheFirst', TO_DATE('12-OCT-1991', 'DD-MON-YYYY'), 'unique position');
+
+1 row created.
+
+SQL> 
+SQL> /* View APPS records */
+SQL> SELECT * FROM APPS;
+
+FNAME                LNAME                          DOB       TITLE                                                                                                                                     
+-------------------- ------------------------------ --------- ------------------------------                                                                                                            
+Harry                Potter                         12-DEC-80 professor                                                                                                                                 
+Harry                Potter                         12-DEC-80 lecturer                                                                                                                                  
+Johnny               Walker                         13-FEB-90 professor                                                                                                                                 
+Johnny               Walker                         13-FEB-90 lecturer                                                                                                                                  
+Mary                 Poppins                        01-JAN-50 professor                                                                                                                                 
+Mary                 Poppins                        01-JAN-50 lecturer                                                                                                                                  
+Michael              Collins                        25-MAY-60 professor                                                                                                                                 
+Michael              Collins                        25-MAY-60 lecturer                                                                                                                                  
+Margaret             Finch                          07-DEC-53 professor                                                                                                                                 
+Margaret             Finch                          07-DEC-53 senior lecturer                                                                                                                           
+Margaret             Finch                          07-DEC-53 lecturer                                                                                                                                  
+Claudia              Kowalewski                     03-MAY-59 professor                                                                                                                                 
+Claudia              Kowalewski                     03-MAY-59 senior lecturer                                                                                                                           
+James                Bond                           01-JAN-60 professor                                                                                                                                 
+James                Bond                           01-JAN-60 associate professor                                                                                                                       
+James                Bond                           01-JAN-60 senior lecturer                                                                                                                           
+Stephen              Staunton                       23-OCT-77 associate professor                                                                                                                       
+Joseph               Staunton                       23-OCT-77 associate professor                                                                                                                       
+John                 Spiderman                      21-JUN-90 professor                                                                                                                                 
+George               TheFirst                       12-OCT-91 unique position                                                                                                                           
+
+20 rows selected.
+
+SQL> 
+SQL> /* View APPLIES records */
+SQL> SELECT * FROM APPLIES;
+
+   ANUMBER    PNUMBER APPDATE                                                                                                                                                                           
+---------- ---------- ---------                                                                                                                                                                         
+         1          1 13-DEC-99                                                                                                                                                                         
+         2          1 13-DEC-99                                                                                                                                                                         
+         3          2 14-NOV-99                                                                                                                                                                         
+         4          2 20-JAN-00                                                                                                                                                                         
+         5          2 22-JAN-00                                                                                                                                                                         
+         5          3 09-MAY-99                                                                                                                                                                         
+         6          3 17-JUN-99                                                                                                                                                                         
+         7          3 18-JUN-99                                                                                                                                                                         
+         7          4 13-APR-00                                                                                                                                                                         
+         8          4 13-APR-00                                                                                                                                                                         
+         9          4 14-APR-00                                                                                                                                                                         
+        10          5 23-SEP-99                                                                                                                                                                         
+         1          6 26-OCT-99                                                                                                                                                                         
+         2          6 27-OCT-99                                                                                                                                                                         
+         3          6 28-OCT-99                                                                                                                                                                         
+         4          7 01-JAN-00                                                                                                                                                                         
+         5          7 03-JAN-00                                                                                                                                                                         
+         6          7 04-JAN-00                                                                                                                                                                         
+         7          7 07-JAN-00                                                                                                                                                                         
+        11         11 03-APR-14                                                                                                                                                                         
+
+20 rows selected.
+
+SQL> 
+SQL> DROP TRIGGER solution7;
+
+Trigger dropped.
+
+SQL> 
+SQL> DROP VIEW APPS;
+
+View dropped.
+
+SQL> 
+SQL> spool off

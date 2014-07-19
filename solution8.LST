@@ -1,0 +1,304 @@
+SQL> 
+SQL> SET ECHO ON
+SQL> SET FEEDBACK ON
+SQL> /*
+SQL> Name: Aaron Colin Foote
+SQL> File: solution 7 for CSCI315 Assignment 2
+SQL> Date: 17th April 2014
+SQL> Note: SELECT SUM(BYTES) FROM DBA_EXTENTS WHERE OWNER = 'CSCI315' returned 444596224 (bytes)
+SQL> 444596224 / 1024 / 1024 = 424 megabytes.
+SQL> I allocated a bit more than this (450 MB), to be sure there was enough space.
+SQL>  */
+SQL> 
+SQL> /* (1) Implement SQL script solution8.sql that creates a new tablespace with the
+SQL> following parameters. The tablespace must be a locally managed tablespace with the
+SQL> uniform allocation of extents and with the size of each extent equal to 128 Kbytes. The
+SQL> size of the tablespace is up to you however initially it should be large enough to
+SQL> accommodate entire database owned by CSCI315 user. The tablespace must have
+SQL> manual management of free space. The tablespace must consist of one file. The file must
+SQL> not be autoextensible. All other parameters of the tablespace are up to you. */
+SQL> 
+SQL> CREATE TABLESPACE TBS_SOLUTION_EIGHT
+  2  	     EXTENT MANAGEMENT LOCAL
+  3  		     UNIFORM SIZE 128K
+  4  	     SEGMENT SPACE MANAGEMENT MANUAL
+  5  	     DATAFILE 'G:\University\DB_Design_CSCI315\Assignments\Assignment2\TBS_SOLUTION_EIGHT.DBF'
+  6  		     SIZE 450M AUTOEXTEND OFF;
+
+Tablespace created.
+
+SQL> 
+SQL> /* (2) Create a new user account with CONNECT and RESOURCE roles granted to it and with
+SQL> DEFAULT profile. A name of a new user account is up to you. The new user must have
+SQL> access to the entire new tablespace created in the previous step. */
+SQL> 
+SQL> CREATE USER soleight IDENTIFIED BY soleight;
+
+User created.
+
+SQL> 
+SQL> GRANT CONNECT, RESOURCE TO soleight;
+
+Grant succeeded.
+
+SQL> 
+SQL> ALTER USER soleight PROFILE default;
+
+User altered.
+
+SQL> 
+SQL> ALTER USER soleight DEFAULT TABLESPACE TBS_SOLUTION_EIGHT;
+
+User altered.
+
+SQL> 
+SQL> ALTER USER soleight QUOTA 450M ON TBS_SOLUTION_EIGHT;
+
+User altered.
+
+SQL> 
+SQL> ALTER USER CSCI315 QUOTA 450M ON TBS_SOLUTION_EIGHT;
+
+User altered.
+
+SQL> 
+SQL> /*(3) Next, your script must copy all relational tables owned a user CSCI315 and such that
+SQL> the tables belong to TPC-R benchmark database from CSCI315 tablespace to the new
+SQL> tablespace created earlier. The relational tables in the new tablespace must be owned by
+SQL> the new user. All consistency constraints valid in the relational tables owned by a user
+SQL> CSCI315 must be preserved in the relational tables owned by the new user. */
+SQL> 
+SQL> /* Grant the new user access to copy data from CSCI315 */
+SQL> conn CSCI315/csci315;
+Connected.
+SQL> 
+SQL> GRANT SELECT ON REGION TO soleight;
+
+Grant succeeded.
+
+SQL> GRANT SELECT ON NATION TO soleight;
+
+Grant succeeded.
+
+SQL> GRANT SELECT ON PART TO soleight;
+
+Grant succeeded.
+
+SQL> GRANT SELECT ON SUPPLIER TO soleight;
+
+Grant succeeded.
+
+SQL> GRANT SELECT ON PARTSUPP TO soleight;
+
+Grant succeeded.
+
+SQL> GRANT SELECT ON CUSTOMER TO soleight;
+
+Grant succeeded.
+
+SQL> GRANT SELECT ON ORDERS TO soleight;
+
+Grant succeeded.
+
+SQL> GRANT SELECT ON LINEITEM TO soleight;
+
+Grant succeeded.
+
+SQL> 
+SQL> /* Create tables as new user, so they are owned by the new user */
+SQL> conn soleight/soleight;
+Connected.
+SQL> 
+SQL> CREATE TABLE REGION_NEW(
+  2  R_REGIONKEY     NUMBER(12)      NOT NULL,
+  3  R_NAME	     CHAR(25)	     NOT NULL,
+  4  R_COMMENT	     VARCHAR(152)    NOT NULL,
+  5  	     CONSTRAINT REGION_NEW_PKEY PRIMARY KEY(R_REGIONKEY),
+  6  	     CONSTRAINT REGION_NEW_CHECK1 CHECK(R_REGIONKEY >= 0) ) TABLESPACE TBS_SOLUTION_EIGHT;
+
+Table created.
+
+SQL> 
+SQL> CREATE TABLE NATION_NEW(
+  2  N_NATIONKEY     NUMBER(12)      NOT NULL,
+  3  N_NAME	     CHAR(25)	     NOT NULL,
+  4  N_REGIONKEY     NUMBER(12)      NOT NULL,
+  5  N_COMMENT	     VARCHAR(152)    NOT NULL,
+  6  	     CONSTRAINT NATION_NEW_PKEY PRIMARY KEY (N_NATIONKEY),
+  7  	     CONSTRAINT NATION_NEW_FKEY1 FOREIGN KEY (N_REGIONKEY)
+  8  		     REFERENCES REGION_NEW(R_REGIONKEY),
+  9  	     CONSTRAINT NATION_NEW_CHECK1 CHECK(N_NATIONKEY >= 0) ) TABLESPACE TBS_SOLUTION_EIGHT;
+
+Table created.
+
+SQL> 
+SQL> CREATE TABLE PART_NEW(
+  2  P_PARTKEY	     NUMBER(12)      NOT NULL,
+  3  P_NAME	     VARCHAR(55)     NOT NULL,
+  4  P_MFGR	     VARCHAR(25)     NOT NULL,
+  5  P_BRAND	     CHAR(10)	     NOT NULL,
+  6  P_TYPE	     VARCHAR(25)     NOT NULL,
+  7  P_SIZE	     NUMBER(12)      NOT NULL,
+  8  P_CONTAINER     CHAR(10)	     NOT NULL,
+  9  P_RETAILPRICE   NUMBER(12,2)    NOT NULL,
+ 10  P_COMMENT	     VARCHAR(23)     NOT NULL,
+ 11  	     CONSTRAINT PART_NEW_PEKEY PRIMARY KEY (P_PARTKEY),
+ 12  	     CONSTRAINT PART_NEW_CHECK1 CHECK(P_PARTKEY >= 0),
+ 13  	     CONSTRAINT PART_NEW_CHECK2 CHECK(P_SIZE >= 0),
+ 14  	     CONSTRAINT PART_NEW_CHECK3 CHECK(P_RETAILPRICE >= 0) ) TABLESPACE TBS_SOLUTION_EIGHT;
+
+Table created.
+
+SQL> 
+SQL> CREATE TABLE SUPPLIER_NEW(
+  2  S_SUPPKEY	     NUMBER(12)      NOT NULL,
+  3  S_NAME	     CHAR(25)	     NOT NULL,
+  4  S_ADDRESS	     VARCHAR(40)     NOT NULL,
+  5  S_NATIONKEY     NUMBER(12)      NOT NULL,
+  6  S_PHONE	     CHAR(15)	     NOT NULL,
+  7  S_ACCTBAL	     NUMBER(12,2)    NOT NULL,
+  8  S_COMMENT	     VARCHAR(101)    NOT NULL,
+  9  	     CONSTRAINT SUPPLIER_NEW_PKEY PRIMARY KEY (S_SUPPKEY),
+ 10  	     CONSTRAINT SUPPLIER_NEW_FKEY1 FOREIGN kEY (S_NATIONKEY)
+ 11  		     REFERENCES NATION_NEW(N_NATIONKEY),
+ 12  	     CONSTRAINT SUPPLIER_NEW_CHECK1 CHECK(S_SUPPKEY >= 0) ) TABLESPACE TBS_SOLUTION_EIGHT;
+
+Table created.
+
+SQL> 
+SQL> CREATE TABLE PARTSUPP_NEW(
+  2  PS_PARTKEY      NUMBER(12)      NOT NULL,
+  3  PS_SUPPKEY      NUMBER(12)      NOT NULL,
+  4  PS_AVAILQTY     NUMBER(12)      NOT NULL,
+  5  PS_SUPPLYCOST   NUMBER(12,2)    NOT NULL,
+  6  PS_COMMENT      VARCHAR(199)    NOT NULL,
+  7  	     CONSTRAINT PARTSUPP_NEW_PKEY PRIMARY KEY (PS_PARTKEY, PS_SUPPKEY),
+  8  	     CONSTRAINT PARTSUPP_NEW_FKEY1 FOREIGN KEY (PS_PARTKEY)
+  9  		     REFERENCES PART_NEW(P_PARTKEY),
+ 10  	     CONSTRAINT PARTSUPP_NEW_FKEY2 FOREIGN kEY (PS_SUPPKEY)
+ 11  		     REFERENCES SUPPLIER_NEW(S_SUPPKEY),
+ 12  	     CONSTRAINT PARTSUPP_NEW_CHECK1 CHECK(PS_PARTKEY >= 0),
+ 13  	     CONSTRAINT PARTSUPP_NEW_CHECK2 CHECK(PS_AVAILQTY >= 0),
+ 14  	     CONSTRAINT PARTSUPP_NEW_CHECK3 CHECK(PS_SUPPLYCOST >= 0) ) TABLESPACE TBS_SOLUTION_EIGHT;
+
+Table created.
+
+SQL> 
+SQL> CREATE TABLE CUSTOMER_NEW(
+  2  C_CUSTKEY	     NUMBER(12)      NOT NULL,
+  3  C_NAME	     VARCHAR(25)     NOT NULL,
+  4  C_ADDRESS	     VARCHAR(40)     NOT NULL,
+  5  C_NATIONKEY     NUMBER(12)      NOT NULL,
+  6  C_PHONE	     CHAR(15)	     NOT NULL,
+  7  C_ACCTBAL	     NUMBER(12,2)    NOT NULL,
+  8  C_MKTSEGMENT    CHAR(10)	     NOT NULL,
+  9  C_COMMENT	     VARCHAR(117)    NOT NULL,
+ 10  	     CONSTRAINT CUSTOMER_NEW_PKEY PRIMARY KEY(C_CUSTKEY),
+ 11  	     CONSTRAINT CUSTOMER_NEW_FKEY1 FOREIGN kEY (C_NATIONKEY)
+ 12  		     REFERENCES NATION_NEW(N_NATIONKEY),
+ 13  	     CONSTRAINT CUSTOMER_NEW_CHECK1 CHECK(C_CUSTKEY >= 0) ) TABLESPACE TBS_SOLUTION_EIGHT;
+
+Table created.
+
+SQL> 
+SQL> CREATE TABLE ORDERS_NEW(
+  2  O_ORDERKEY      NUMBER(12)      NOT NULL,
+  3  O_CUSTKEY	     NUMBER(12)      NOT NULL,
+  4  O_ORDERSTATUS   CHAR(1)	     NOT NULL,
+  5  O_TOTALPRICE    NUMBER(12,2)    NOT NULL,
+  6  O_ORDERDATE     DATE	     NOT NULL,
+  7  O_ORDERPRIORITY CHAR(15)	     NOT NULL,
+  8  O_CLERK	     CHAR(15)	     NOT NULL,
+  9  O_SHIPPRIORITY  NUMBER(12)      NOT NULL,
+ 10  O_COMMENT	     VARCHAR(79)     NOT NULL,
+ 11  	     CONSTRAINT ORDERS_NEW_PKEY PRIMARY KEY (O_ORDERKEY),
+ 12  	     CONSTRAINT ORDERS_NEW_FKEY1 FOREIGN kEY (O_CUSTKEY)
+ 13  		     REFERENCES CUSTOMER_NEW(C_CUSTKEY),
+ 14  	     CONSTRAINT ORDER_NEW_CHECK1 CHECK( O_TOTALPRICE >= 0) ) TABLESPACE TBS_SOLUTION_EIGHT;
+
+Table created.
+
+SQL> 
+SQL> CREATE TABLE LINEITEM_NEW(
+  2  L_ORDERKEY      NUMBER(12)      NOT NULL,
+  3  L_PARTKEY	     NUMBER(12)      NOT NULL,
+  4  L_SUPPKEY	     NUMBER(12)      NOT NULL,
+  5  L_LINENUMBER    NUMBER(12)      NOT NULL,
+  6  L_QUANTITY      NUMBER(12,2)    NOT NULL,
+  7  L_EXTENDEDPRICE NUMBER(12,2)    NOT NULL,
+  8  L_DISCOUNT      NUMBER(12,2)    NOT NULL,
+  9  L_TAX	     NUMBER(12,2)    NOT NULL,
+ 10  L_RETURNFLAG    CHAR(1)	     NOT NULL,
+ 11  L_LINESTATUS    CHAR(1)	     NOT NULL,
+ 12  L_SHIPDATE      DATE	     NOT NULL,
+ 13  L_COMMITDATE    DATE	     NOT NULL,
+ 14  L_RECEIPTDATE   DATE	     NOT NULL,
+ 15  L_SHIPINSTRUCT  CHAR(25)	     NOT NULL,
+ 16  L_SHIPMODE      CHAR(10)	     NOT NULL,
+ 17  L_COMMENT	     VARCHAR(44)     NOT NULL,
+ 18  	     CONSTRAINT LINEITEM_NEW_PKEY PRIMARY KEY (L_ORDERKEY, L_LINENUMBER),
+ 19  	     CONSTRAINT LINEITEM_NEW_FKEY1 FOREIGN kEY (L_ORDERKEY)
+ 20  		     REFERENCES ORDERS_NEW(O_ORDERKEY),
+ 21  	     CONSTRAINT LINEITEM_NEW_FKEY2 FOREIGN KEY (L_PARTKEY)
+ 22  		     REFERENCES PART_NEW(P_PARTKEY),
+ 23  	     CONSTRAINT LINEITEM_NEW_FKEY3 FOREIGN KEY (L_PARTKEY,L_SUPPKEY)
+ 24  		     REFERENCES PARTSUPP_NEW(PS_PARTKEY, PS_SUPPKEY),
+ 25  	     CONSTRAINT LINEITEM_NEW_FKEY4 FOREIGN kEY (L_SUPPKEY)
+ 26  		     REFERENCES SUPPLIER_NEW(S_SUPPKEY),
+ 27  	     CONSTRAINT LINEITEM_NEW_CHECK1 CHECK (L_QUANTITY >= 0),
+ 28  	     CONSTRAINT LINEITEM_NEW_CHECK2 CHECK (L_EXTENDEDPRICE >= 0),
+ 29  	     CONSTRAINT LINEITEM_NEW_CHECK3 CHECK (L_TAX >= 0),
+ 30  	     CONSTRAINT LINEITEM_NEW_CHECK4 CHECK (L_DISCOUNT BETWEEN 0.00 AND 1.00) ) TABLESPACE TBS_SOLUTION_EIGHT;
+
+Table created.
+
+SQL> 
+SQL> /* Insert records from CSCI315 tables */
+SQL> INSERT INTO REGION_NEW SELECT * FROM CSCI315.REGION;
+
+5 rows created.
+
+SQL> INSERT INTO NATION_NEW SELECT * FROM CSCI315.NATION;
+
+25 rows created.
+
+SQL> INSERT INTO PART_NEW SELECT * FROM CSCI315.PART;
+
+60000 rows created.
+
+SQL> INSERT INTO SUPPLIER_NEW SELECT * FROM CSCI315.SUPPLIER;
+
+3000 rows created.
+
+SQL> INSERT INTO PARTSUPP_NEW SELECT * FROM CSCI315.PARTSUPP;
+
+240000 rows created.
+
+SQL> INSERT INTO CUSTOMER_NEW SELECT * FROM CSCI315.CUSTOMER;
+
+45000 rows created.
+
+SQL> INSERT INTO ORDERS_NEW SELECT * FROM CSCI315.ORDERS;
+
+450000 rows created.
+
+SQL> INSERT INTO LINEITEM_NEW SELECT * FROM CSCI315.LINEITEM;
+
+1800093 rows created.
+
+SQL> 
+SQL> /* Clean up */
+SQL> conn system/babaryba;
+Connected.
+SQL> 
+SQL> DROP USER soleight CASCADE;
+
+User dropped.
+
+SQL> 
+SQL> DROP TABLESPACE TBS_SOLUTION_EIGHT INCLUDING CONTENTS AND DATAFILES;
+
+Tablespace dropped.
+
+SQL> 
+SQL> spool off

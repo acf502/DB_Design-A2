@@ -1,0 +1,375 @@
+SQL> 
+SQL> SET ECHO ON
+SQL> SET FEEDBACK ON
+SQL> set PAGESIZE 25
+SQL> /*
+SQL> Name: Aaron Colin Foote
+SQL> File: solution 6 for CSCI315 Assignment 2
+SQL> Date: 1st April 2014
+SQL> Note: I did not include @dbcreate.sql and @dbdrop.sql because they interfered with the .lst
+SQL> output file that I was creating.
+SQL>  */
+SQL> 
+SQL>  /* (1)
+SQL>  First, the script must add to the database information about an average period of
+SQL> employment for each applicant. SQL script must contain only SQL statements.
+SQL> PL/SQL, JDBC, Pro*C++, etc are not acceptable in this case. The script must
+SQL> perform a structural modification of the database and then for each applicant it must
+SQL> update information about an average period of employment. Note, that minimal
+SQL> amount of new information must be added to the database. */
+SQL> 
+SQL> /* Add attribute average employment to applicant table and count of jobs */
+SQL> ALTER TABLE APPLICANT
+  2  ADD avgEmployment NUMBER;
+
+Table altered.
+
+SQL> 
+SQL> /* I found it was necessary to add this extra information since using the count function
+SQL> on emplby would not work properly, since the table was being mutated */
+SQL> ALTER TABLE APPLICANT
+  2  ADD jobCount NUMBER;
+
+Table altered.
+
+SQL> 
+SQL> /* Initialize all average employment times to 0 and job counts to 0*/
+SQL> UPDATE APPLICANT
+  2  SET avgEmployment = 0;
+
+20 rows updated.
+
+SQL> 
+SQL> UPDATE APPLICANT
+  2  SET jobCount = 0;
+
+20 rows updated.
+
+SQL> 
+SQL> /* Calculate average employment time of each applicant */
+SQL> UPDATE APPLICANT a
+  2  SET a.AvgEmployment = a.AvgEmployment +
+  3  (SELECT AVG(nvl(e.todate, trunc(sysdate)) - e.fromdate)
+  4   FROM EMPLBY e
+  5   WHERE a.anumber = e.anumber)
+  6  WHERE a.anumber IN (SELECT e.anumber FROM EMPLBY e);
+
+19 rows updated.
+
+SQL> 
+SQL> UPDATE APPLICANT
+  2  SET jobCount = (SELECT COUNT(*)
+  3  				     FROM EMPLBY
+  4  				     WHERE EMPLBY.anumber = APPLICANT.anumber );
+
+20 rows updated.
+
+SQL> 
+SQL> /* Demonstrate the current average employment times of each applicant */
+SQL> SELECT anumber, AvgEmployment, jobCount FROM APPLICANT;
+
+   ANUMBER AVGEMPLOYMENT   JOBCOUNT                                                                                                                                                                     
+---------- ------------- ----------                                                                                                                                                                     
+         1          4110          2                                                                                                                                                                     
+         2          1866          1                                                                                                                                                                     
+         3       3326.75          4                                                                                                                                                                     
+         4        5276.5          2                                                                                                                                                                     
+         5          2562          5                                                                                                                                                                     
+         6        2363.2          5                                                                                                                                                                     
+         7        6025.5          2                                                                                                                                                                     
+         8        1612.5          4                                                                                                                                                                     
+         9        1545.6          5                                                                                                                                                                     
+        10         236.4          5                                                                                                                                                                     
+        11            91          1                                                                                                                                                                     
+        12    209.384615         13                                                                                                                                                                     
+        13          9295          1                                                                                                                                                                     
+        14       2167.75          4                                                                                                                                                                     
+        15        1156.5          2                                                                                                                                                                     
+        16          4687          1                                                                                                                                                                     
+        17           537          3                                                                                                                                                                     
+        18    696.952381         21                                                                                                                                                                     
+        19             0          0                                                                                                                                                                     
+        20          8340          1                                                                                                                                                                     
+
+20 rows selected.
+
+SQL> 
+SQL> /* (2)
+SQL>  Next, the script must implement the row database triggers that enforce correctness
+SQL> of information about the applicants' average period of employment whenever
+SQL> information about new/old employment period is added/deleted from the database. */
+SQL> 
+SQL> CREATE OR REPLACE TRIGGER solution6
+  2  AFTER INSERT OR DELETE ON EMPLBY
+  3  FOR EACH ROW
+  4  DECLARE
+  5  	     PRAGMA AUTONOMOUS_TRANSACTION;
+  6  	     OLDPOSITIONS NUMBER(2);
+  7  	     NEWPOSITIONS NUMBER(2);
+  8  BEGIN
+  9  	     /* INSERT PROCEDURE */
+ 10  	     IF INSERTING THEN
+ 11  		     SELECT jobCount
+ 12  		     INTO OLDPOSITIONS
+ 13  		     FROM APPLICANT
+ 14  		     WHERE anumber = :NEW.anumber;
+ 15  
+ 16  		     UPDATE APPLICANT
+ 17  		     SET jobCount = jobCount + 1
+ 18  		     WHERE anumber = :NEW.anumber;
+ 19  
+ 20  		     SELECT jobCount
+ 21  		     INTO NEWPOSITIONS
+ 22  		     FROM APPLICANT
+ 23  		     WHERE anumber = :NEW.anumber;
+ 24  
+ 25  		     /*      inserting and this is the first record for this employee
+ 26  			     set average employment time to this records employment time
+ 27  		     */
+ 28  		     IF (NEWPOSITIONS = 0) THEN
+ 29  				     UPDATE APPLICANT a
+ 30  				     SET a.avgEmployment = (nvl(:NEW.todate, trunc(sysdate)) - :NEW.fromdate)
+ 31  				     WHERE a.anumber = :NEW.anumber;
+ 32  
+ 33  		     /*      inserting and this is not the first record for this employee
+ 34  			     set average employment time to multiply by existing position count
+ 35  			     then add the new employment record's time to the total time
+ 36  			     divide this new total time by the new amount of positions employed
+ 37  		     */
+ 38  		     ELSE
+ 39  
+ 40  			     UPDATE APPLICANT a
+ 41  			     SET a.avgEmployment = (a.avgEmployment * OLDPOSITIONS + (nvl(:NEW.todate, trunc(sysdate)) - :NEW.fromdate)) / NEWPOSITIONS
+ 42  			     WHERE a.anumber = :NEW.anumber;
+ 43  		     END IF;
+ 44  
+ 45  	     /* DELETE PROCEDURE, this point couldn't be reached otherwise */
+ 46  	     ELSE
+ 47  		     SELECT jobCount
+ 48  		     INTO OLDPOSITIONS
+ 49  		     FROM APPLICANT
+ 50  		     WHERE anumber = :OLD.anumber;
+ 51  
+ 52  		     UPDATE APPLICANT
+ 53  		     SET jobCount = jobCount - 1
+ 54  		     WHERE anumber = :OLD.anumber;
+ 55  
+ 56  		     SELECT jobCount
+ 57  		     INTO NEWPOSITIONS
+ 58  		     FROM APPLICANT
+ 59  		     WHERE anumber = :OLD.anumber;
+ 60  
+ 61  		     /*      deleting and only one record existed
+ 62  			     reset average employment to 0
+ 63  		     */
+ 64  		     IF (OLDPOSITIONS = 1) THEN
+ 65  			     UPDATE APPLICANT a
+ 66  			     SET a.AvgEmployment = 0
+ 67  			     WHERE a.anumber = :OLD.anumber;
+ 68  		     /*      deleting and more than one record existed
+ 69  			     multiply the average employment time by the positions previously employed
+ 70  			     take away the job just removed from the total time
+ 71  			     divide the total time by the new amount of jobs employed at
+ 72  		     */
+ 73  		     ELSE
+ 74  			     UPDATE APPLICANT a
+ 75  			     SET a.AvgEmployment = (a.AvgEmployment * OLDPOSITIONS - (nvl(:OLD.todate, trunc(sysdate)) - :OLD.fromdate) ) / NEWPOSITIONS
+ 76  			     WHERE a.anumber = :OLD.anumber;
+ 77  		     END IF;
+ 78  
+ 79  	     END IF;
+ 80  	     COMMIT;
+ 81  END;
+ 82  /
+
+Trigger created.
+
+SQL> 
+SQL> show errors
+No errors.
+SQL> 
+SQL> /* (3)
+SQL>  Finally the script must comprehensively test the triggers implemented in a step (2). */
+SQL> 
+SQL> SELECT anumber, AvgEmployment FROM APPLICANT;
+
+   ANUMBER AVGEMPLOYMENT                                                                                                                                                                                
+---------- -------------                                                                                                                                                                                
+         1          4110                                                                                                                                                                                
+         2          1866                                                                                                                                                                                
+         3       3326.75                                                                                                                                                                                
+         4        5276.5                                                                                                                                                                                
+         5          2562                                                                                                                                                                                
+         6        2363.2                                                                                                                                                                                
+         7        6025.5                                                                                                                                                                                
+         8        1612.5                                                                                                                                                                                
+         9        1545.6                                                                                                                                                                                
+        10         236.4                                                                                                                                                                                
+        11            91                                                                                                                                                                                
+        12    209.384615                                                                                                                                                                                
+        13          9295                                                                                                                                                                                
+        14       2167.75                                                                                                                                                                                
+        15        1156.5                                                                                                                                                                                
+        16          4687                                                                                                                                                                                
+        17           537                                                                                                                                                                                
+        18    696.952381                                                                                                                                                                                
+        19             0                                                                                                                                                                                
+        20          8340                                                                                                                                                                                
+
+20 rows selected.
+
+SQL> 
+SQL> /* Creates a new emplby record, no others exist with anumber '19'
+SQL> so the average is based on this insert alone */
+SQL> 
+SQL> INSERT INTO EMPLBY VALUES ( 00000019, 'University of Wollongong', TO_DATE('01-JAN-2014', 'DD-MON-YYYY'), NULL );
+
+1 row created.
+
+SQL> 
+SQL> SELECT anumber, AvgEmployment FROM APPLICANT;
+
+   ANUMBER AVGEMPLOYMENT                                                                                                                                                                                
+---------- -------------                                                                                                                                                                                
+         1          4110                                                                                                                                                                                
+         2          1866                                                                                                                                                                                
+         3       3326.75                                                                                                                                                                                
+         4        5276.5                                                                                                                                                                                
+         5          2562                                                                                                                                                                                
+         6        2363.2                                                                                                                                                                                
+         7        6025.5                                                                                                                                                                                
+         8        1612.5                                                                                                                                                                                
+         9        1545.6                                                                                                                                                                                
+        10         236.4                                                                                                                                                                                
+        11            91                                                                                                                                                                                
+        12    209.384615                                                                                                                                                                                
+        13          9295                                                                                                                                                                                
+        14       2167.75                                                                                                                                                                                
+        15        1156.5                                                                                                                                                                                
+        16          4687                                                                                                                                                                                
+        17           537                                                                                                                                                                                
+        18    696.952381                                                                                                                                                                                
+        19            90                                                                                                                                                                                
+        20          8340                                                                                                                                                                                
+
+20 rows selected.
+
+SQL> 
+SQL> /* Create another record for 0000002 in emplby, now 2 days less than before
+SQL> so the average should drop by 1 day */
+SQL> 
+SQL> INSERT INTO EMPLBY VALUES ( 0000002, 'University of Queensland', TO_DATE('22-FEB-2009', 'DD-MON-YYYY'), NULL );
+
+1 row created.
+
+SQL> 
+SQL> SELECT anumber, AvgEmployment FROM APPLICANT;
+
+   ANUMBER AVGEMPLOYMENT                                                                                                                                                                                
+---------- -------------                                                                                                                                                                                
+         1          4110                                                                                                                                                                                
+         2          1865                                                                                                                                                                                
+         3       3326.75                                                                                                                                                                                
+         4        5276.5                                                                                                                                                                                
+         5          2562                                                                                                                                                                                
+         6        2363.2                                                                                                                                                                                
+         7        6025.5                                                                                                                                                                                
+         8        1612.5                                                                                                                                                                                
+         9        1545.6                                                                                                                                                                                
+        10         236.4                                                                                                                                                                                
+        11            91                                                                                                                                                                                
+        12    209.384615                                                                                                                                                                                
+        13          9295                                                                                                                                                                                
+        14       2167.75                                                                                                                                                                                
+        15        1156.5                                                                                                                                                                                
+        16          4687                                                                                                                                                                                
+        17           537                                                                                                                                                                                
+        18    696.952381                                                                                                                                                                                
+        19            90                                                                                                                                                                                
+        20          8340                                                                                                                                                                                
+
+20 rows selected.
+
+SQL> 
+SQL> /* Delete previous 0000002 record from the table and the average employment should increase by 1.
+SQL> As if the previous step never took place, basically */
+SQL> 
+SQL> DELETE FROM EMPLBY
+  2  WHERE anumber = 0000002 AND ename = 'University of Queensland';
+
+1 row deleted.
+
+SQL> 
+SQL> SELECT anumber, AvgEmployment FROM APPLICANT;
+
+   ANUMBER AVGEMPLOYMENT                                                                                                                                                                                
+---------- -------------                                                                                                                                                                                
+         1          4110                                                                                                                                                                                
+         2          1866                                                                                                                                                                                
+         3       3326.75                                                                                                                                                                                
+         4        5276.5                                                                                                                                                                                
+         5          2562                                                                                                                                                                                
+         6        2363.2                                                                                                                                                                                
+         7        6025.5                                                                                                                                                                                
+         8        1612.5                                                                                                                                                                                
+         9        1545.6                                                                                                                                                                                
+        10         236.4                                                                                                                                                                                
+        11            91                                                                                                                                                                                
+        12    209.384615                                                                                                                                                                                
+        13          9295                                                                                                                                                                                
+        14       2167.75                                                                                                                                                                                
+        15        1156.5                                                                                                                                                                                
+        16          4687                                                                                                                                                                                
+        17           537                                                                                                                                                                                
+        18    696.952381                                                                                                                                                                                
+        19            90                                                                                                                                                                                
+        20          8340                                                                                                                                                                                
+
+20 rows selected.
+
+SQL> 
+SQL> /* Delete remaining 0000002 employee record from the table,
+SQL> average employment should drop to 0 since there are no values to average */
+SQL> 
+SQL> DELETE FROM EMPLBY
+  2  WHERE anumber = 0000002;
+
+1 row deleted.
+
+SQL> 
+SQL> SELECT anumber, AvgEmployment FROM APPLICANT;
+
+   ANUMBER AVGEMPLOYMENT                                                                                                                                                                                
+---------- -------------                                                                                                                                                                                
+         1          4110                                                                                                                                                                                
+         2             0                                                                                                                                                                                
+         3       3326.75                                                                                                                                                                                
+         4        5276.5                                                                                                                                                                                
+         5          2562                                                                                                                                                                                
+         6        2363.2                                                                                                                                                                                
+         7        6025.5                                                                                                                                                                                
+         8        1612.5                                                                                                                                                                                
+         9        1545.6                                                                                                                                                                                
+        10         236.4                                                                                                                                                                                
+        11            91                                                                                                                                                                                
+        12    209.384615                                                                                                                                                                                
+        13          9295                                                                                                                                                                                
+        14       2167.75                                                                                                                                                                                
+        15        1156.5                                                                                                                                                                                
+        16          4687                                                                                                                                                                                
+        17           537                                                                                                                                                                                
+        18    696.952381                                                                                                                                                                                
+        19            90                                                                                                                                                                                
+        20          8340                                                                                                                                                                                
+
+20 rows selected.
+
+SQL> 
+SQL> /* Clean up by deleting trigger */
+SQL> 
+SQL> DROP TRIGGER solution6;
+
+Trigger dropped.
+
+SQL> 
+SQL> spool off
